@@ -58,6 +58,6 @@ test('valid push returns 202 and sends an embed to Discord', async () => {
     const res = await post(base, { 'X-GitHub-Event': 'push', 'X-Hub-Signature-256': sign(body) });
     assert.equal(res.status, 202);
     assert.equal(sent.length, 1);
-    assert.equal(sent[0][1].title, 'feat: add webhook listener');
+    assert.equal(sent[0][1].title, 'docs: add setup and smee.io demo instructions');
   });
 });

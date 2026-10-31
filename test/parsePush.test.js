@@ -8,13 +8,16 @@ const clone = () => structuredClone(fixture);
 
 test('parsePush extracts commit message, author and branch', () => {
   const push = parsePush(fixture);
-  assert.equal(push.branch, 'main');
-  assert.equal(push.author, 'Octo Cat');
-  assert.equal(push.title, 'feat: add webhook listener');
-  assert.equal(push.body, 'Verifies the signature and parses push events.');
-  assert.equal(push.sha, 'a1b2c3d');
-  assert.equal(push.repo, 'octo/demo');
-  assert.equal(push.commitCount, 1);
+  assert.equal(push.branch, 'feat/ci-monitor');
+  assert.equal(push.author, 'ckuudee');
+  assert.equal(push.title, 'docs: add setup and smee.io demo instructions');
+  assert.equal(
+    push.body,
+    'Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>',
+  );
+  assert.equal(push.sha, '3ede924');
+  assert.equal(push.repo, 'ckuudee/github-discord-ci');
+  assert.equal(push.commitCount, 3);
 });
 
 test('parsePush ignores tag pushes', () => {
@@ -29,15 +32,16 @@ test('parsePush handles branch deletion (head_commit is null)', () => {
   payload.head_commit = null;
   const push = parsePush(payload);
   assert.equal(push.deleted, true);
-  assert.equal(push.author, 'octocat'); // falls back to pusher
+  assert.equal(push.author, 'ckuudee'); // falls back to pusher
 });
 
 test('buildEmbed colors: default branch green, feature blurple, force yellow, delete red', () => {
-  assert.equal(buildEmbed(parsePush(fixture)).color, COLORS.push);
+  // The captured fixture is a push to a feature branch.
+  assert.equal(buildEmbed(parsePush(fixture)).color, COLORS.feature);
 
-  const feature = clone();
-  feature.ref = 'refs/heads/feat/x';
-  assert.equal(buildEmbed(parsePush(feature)).color, COLORS.feature);
+  const main = clone();
+  main.ref = 'refs/heads/main';
+  assert.equal(buildEmbed(parsePush(main)).color, COLORS.push);
 
   const forced = clone();
   forced.forced = true;

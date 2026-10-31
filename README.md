@@ -34,7 +34,7 @@ git commit --allow-empty -m "test: ci monitor" && git push
 Embed colors: green = default branch, blurple = other branch, yellow = force push, red = branch deleted.
 
 Inspect or replay real payloads via the smee channel page or GitHub's Recent Deliveries -> Redeliver.
-`test/fixtures/push.json` is synthetic; replace it with a captured real payload.
+`test/fixtures/push.json` is a real captured push payload, trimmed to the fields we use, with emails removed.
 
 ## Test
 `npm test`

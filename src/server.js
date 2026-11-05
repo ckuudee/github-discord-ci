@@ -6,8 +6,45 @@ const { buildEmbed, sendEmbed } = require('./discord');
 
 const { PORT = 3000, DISCORD_WEBHOOK_URL, GITHUB_WEBHOOK_SECRET } = process.env;
 
-function createApp({ webhookUrl, secret, send = sendEmbed }) {
+const DELIVERY_TTL_MS = 60 * 60 * 1000;
+
+// Remembers recently processed X-GitHub-Delivery IDs. Every entry lives for the
+// same TTL, so the Map is ordered by expiry and a sweep can stop at the first
+// live entry. No timers needed.
+function createDeliveryCache(ttlMs) {
+  const seen = new Map(); // deliveryId -> expiry timestamp
+
+  const sweep = () => {
+    const now = Date.now();
+    for (const [id, expiresAt] of seen) {
+      if (expiresAt > now) break;
+      seen.delete(id);
+    }
+  };
+
+  return {
+    has(id) {
+      sweep();
+      return seen.has(id);
+    },
+    add(id) {
+      sweep();
+      seen.set(id, Date.now() + ttlMs);
+    },
+    delete(id) {
+      seen.delete(id);
+    },
+  };
+}
+
+function createApp({
+  webhookUrl,
+  secret,
+  send = sendEmbed,
+  deliveryTtlMs = DELIVERY_TTL_MS,
+}) {
   const app = express();
+  const deliveries = createDeliveryCache(deliveryTtlMs);
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -22,6 +59,17 @@ function createApp({ webhookUrl, secret, send = sendEmbed }) {
     if (event === 'ping') return res.status(200).send('pong');
     if (event !== 'push') return res.status(204).end();
 
+    // GitHub reuses the same delivery ID when a delivery is redelivered. This runs
+    // after the signature check so unsigned requests can't fill the cache.
+    const deliveryId = req.get('X-GitHub-Delivery');
+    if (deliveryId) {
+      if (deliveries.has(deliveryId)) {
+        console.log(`Duplicate delivery ${deliveryId}, skipping`);
+        return res.status(200).send('duplicate');
+      }
+      deliveries.add(deliveryId);
+    }
+
     let payload;
     try {
       payload = JSON.parse(req.body.toString('utf8'));
@@ -35,9 +83,11 @@ function createApp({ webhookUrl, secret, send = sendEmbed }) {
     // Ack immediately; GitHub gives up on webhooks after ~10s.
     res.status(202).send('accepted');
 
-    send(webhookUrl, buildEmbed(push)).catch((err) =>
-      console.error('Failed to send to Discord:', err.message),
-    );
+    send(webhookUrl, buildEmbed(push)).catch((err) => {
+      console.error('Failed to send to Discord:', err.message);
+      // Forget the ID so a redelivery can retry instead of being dropped as a duplicate.
+      if (deliveryId) deliveries.delete(deliveryId);
+    });
   });
 
   return app;
